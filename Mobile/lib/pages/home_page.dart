@@ -62,7 +62,7 @@ class _HomePageState extends State<HomePage> {
   List<GameCard> cards = [
       GameCard(
       name: 'Dark Magician',
-      type: 'Spellcaster',
+      type: 'Spellcaste',
       attack: 2500,
       defense: 2100,
       imagePath: 'lib/images/dark_magician.png',
