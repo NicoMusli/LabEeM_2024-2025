@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:polibaproject/pages/home_page.dart';
+import 'package:polibaproject/pages/HomePage.dart';
 
 void main() {
   runApp(const MyApp());
