@@ -5,8 +5,11 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:polibaproject/utils/CardWidget.dart';
+import 'package:flutter_bluetooth_classic_serial/flutter_bluetooth_classic.dart';
 import '../utils/GameCard.dart';
 import '../utils/MagicCardAPI.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'dart:async';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -16,13 +19,19 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
-  final List<String> colors = ["All", "Red", "Blue", "White", "Green", "Black"];
+  final List<String> colors = ["All", "Red", "Blue", "White", "Green", "Black", "Other"];
   String selectedColor = "All";
   List<GameCard> allCards = [];
   List<GameCard> filteredCards = [];
   String searchBarText = "";
   String? pendingBluetoothColor;
   late AnimationController _controller;
+
+  bool isConnected = false;
+  StreamSubscription<BluetoothData>? _subscription;
+  StreamSubscription<BluetoothConnectionState>? _connectionSubscription;
+  final FlutterBluetoothClassic _bluetooth = FlutterBluetoothClassic();
+  final String esp32MacAddress = "48:E7:29:89:3F:32";
 
   @override
   void initState() {
@@ -32,7 +41,54 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       vsync: this,
       duration: const Duration(milliseconds: 400),
     );
+    requestPermissions();
+    connection();
   }
+
+
+  Future<void> requestPermissions() async {
+    Map<Permission, PermissionStatus> statuses = await [
+      Permission.bluetooth,
+      Permission.bluetoothConnect,
+      Permission.bluetoothScan,
+    ].request();
+  }
+
+  Future<void> connection() async {
+    try {
+      if (!await _bluetooth.isBluetoothEnabled()) {
+        await _bluetooth.enableBluetooth();
+      }
+
+      bool connected = await _bluetooth.connect(esp32MacAddress);
+      if (!connected) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Connessione Bluetooth fallita.'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+        return;
+      }
+
+      _subscription?.cancel();
+      _subscription = _bluetooth.onDataReceived.listen((BluetoothData data) {
+        onBluetoothColorReceived(data.asString());
+      });
+      _connectionSubscription?.cancel();
+      _connectionSubscription = _bluetooth.onConnectionChanged.listen((connection) {
+        setState(() {
+          isConnected = connection.isConnected;
+        });
+      });
+    } catch (e) {
+      print(e);
+    }
+  }
+
+
 
   Future<void> loadCards() async {
     final file = await _getLocalFile();
@@ -191,6 +247,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
                       onPressed: () async {
+                        Navigator.pop(context);
                         final cardData = await MagicCardApi.fetchCardData(nameController.text);
                         final newCard = cardData != null
                             ? GameCard(
@@ -214,7 +271,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                           applyFilters();
                         });
                         saveCards();
-                        Navigator.pop(context);
+
                       },
                     ),
                   ],
@@ -459,6 +516,19 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                   });
                   saveCards();
                   applyFilters();
+
+                  final List<int> response = [0x59];
+                  try {
+                    await _bluetooth.sendData(response);
+                  } catch (e) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Error: $e'),
+                        backgroundColor: Colors.red,
+                      ),
+                    );
+                  }
+
                   Navigator.of(context).pop();
                 }
               },
@@ -606,20 +676,50 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
     );
   }
 
-  Widget buildBluetoothTestButton() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 6),
-      child: ElevatedButton.icon(
-        icon: const Icon(Icons.bluetooth),
-        label: const Text('Simulate Bluetooth Color'),
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.amber,
-          foregroundColor: Colors.black87,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-        ),
-        onPressed: () {
-          onBluetoothColorReceived("Red"); // Replace with your Bluetooth color event
-        },
+  Widget buildBluetoothConnectionButton() {
+    if (isConnected) return const SizedBox.shrink();
+
+    return Container(
+      margin: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 18),
+      decoration: BoxDecoration(
+        color: Colors.amber[100],
+        borderRadius: BorderRadius.circular(14),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black12,
+            blurRadius: 14,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        children: [
+          const Icon(Icons.bluetooth, color: Colors.amber, size: 28),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              "Try to connect to Bluetooth",
+              style: GoogleFonts.robotoMono(
+                fontWeight: FontWeight.w600,
+                color: Colors.black87,
+                fontSize: 16,
+              ),
+            ),
+          ),
+          const SizedBox(width: 8),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.amber,
+              foregroundColor: Colors.black87,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: const Text("Connect"),
+            onPressed: () {
+              connection();
+            },
+          ),
+        ],
       ),
     );
   }
@@ -653,7 +753,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             buildColorFilters(),
             buildSearchBar(),
             buildPendingBluetoothAlert(),
-            buildBluetoothTestButton(),
+            buildBluetoothConnectionButton(),
             Expanded(
               child: buildCardList(),
             ),
@@ -674,6 +774,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void dispose() {
     _controller.dispose();
+    _subscription?.cancel();
+    _connectionSubscription?.cancel();
+    _bluetooth.dispose();
     super.dispose();
   }
 }
