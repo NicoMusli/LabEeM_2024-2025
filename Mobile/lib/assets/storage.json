@@ -1,0 +1,18 @@
+[
+  {
+    "name": "Dark Magician",
+    "type": "Spellcaste",
+    "attack": 2500,
+    "defense": 2100,
+    "color": "Red",
+    "imageURL": ""
+  },
+  {
+    "name": "Dark Magician",
+    "type": "Spellcaster",
+    "attack": 2500,
+    "defense": 2100,
+    "color": "Red",
+    "imageURL": ""
+  }
+]
