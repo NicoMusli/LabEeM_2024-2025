@@ -175,12 +175,14 @@ void showEditDialog(
       required Function applyFilters,
       required Future<void> Function() saveCards,
     }) {
-  final colors = ["All", "Red", "Blue", "White", "Green", "Black", "Other"];
+  final colors = ["Red", "Blue", "White", "Green", "Black", "Other"];
   final nameController = TextEditingController(text: card.name);
   final typeController = TextEditingController(text: card.type);
   final atkController = TextEditingController(text: card.attack.toString());
   final defController = TextEditingController(text: card.defense.toString());
-  String colorSelected = card.color;
+  String colorSelected = colors.contains(card.color)
+      ? card.color
+      : colors.first;
 
   showDialog(
     context: context,
